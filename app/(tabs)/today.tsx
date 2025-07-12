@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
-import { MaterialIcons, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions } from 'react-native';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 
 const windowWidth = Dimensions.get('window').width;
 
-const days = [
-  { day: 'Wed', date: 2 },
-  { day: 'Thu', date: 3 },
-  { day: 'Fri', date: 4 },
-  { day: 'Sat', date: 5, selected: true },
-  { day: 'Sun', date: 6 },
-  { day: 'Mon', date: 7 },
-  { day: 'Tue', date: 8 },
-];
+function getWeekDates(centerDate: Date) {
+  const week = [];
+  const dayOfWeek = centerDate.getDay();
+  const start = new Date(centerDate);
+  start.setDate(centerDate.getDate() - dayOfWeek);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    week.push(d);
+  }
+  return week;
+}
 
 const tasks = [
   {
@@ -44,8 +47,17 @@ const tasks = [
   },
 ];
 
+const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 export default function TodayScreen() {
   const [taskList, setTaskList] = useState(tasks);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const today = new Date();
+  const centerDate = new Date();
+  centerDate.setDate(today.getDate() + weekOffset * 7);
+  const weekDates = getWeekDates(centerDate);
 
   const toggleTask = (id, type) => {
     setTaskList((prev) =>
@@ -73,17 +85,38 @@ export default function TodayScreen() {
         <MaterialIcons name="help-outline" size={24} color="#fff" style={{ marginHorizontal: 8 }} />
       </View>
       {/* Date Bar */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateBar}>
-        {days.map((d, idx) => (
-          <View
-            key={d.date}
-            style={[styles.dateItem, d.selected && styles.selectedDateItem]}
-          >
-            <Text style={[styles.dateDay, d.selected && styles.selectedDateDay]}>{d.day}</Text>
-            <Text style={[styles.dateNum, d.selected && styles.selectedDateNum]}>{d.date}</Text>
-          </View>
-        ))}
-      </ScrollView>
+      <View style={styles.dateBarRow}>
+        <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)}>
+          <MaterialIcons name="chevron-left" size={28} color="#fff" />
+        </TouchableOpacity>
+        <FlatList
+          data={weekDates}
+          keyExtractor={(item) => item.toISOString()}
+          horizontal
+          scrollEnabled={false}
+          contentContainerStyle={{ width: windowWidth - 100 }}
+          renderItem={({ item: d }) => {
+            const isSelected = d.toDateString() === selectedDate.toDateString();
+            const isToday = d.toDateString() === today.toDateString();
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.dateItem,
+                  { width: (windowWidth - 100) / 7 },
+                  isSelected && styles.selectedDateItem,
+                ]}
+                onPress={() => setSelectedDate(new Date(d))}
+              >
+                <Text style={[styles.dateDay, isSelected && styles.selectedDateDay, isToday && { textDecorationLine: 'underline' }]}>{dayNames[d.getDay()]}</Text>
+                <Text style={[styles.dateNum, isSelected && styles.selectedDateNum]}>{d.getDate()}</Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+        <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)}>
+          <MaterialIcons name="chevron-right" size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
       {/* Filters */}
       <View style={styles.filterRow}>
         <TouchableOpacity style={styles.filterBtnActive}>
@@ -154,17 +187,17 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
   },
-  dateBar: {
+  dateBarRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
     paddingHorizontal: 8,
   },
   dateItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 6,
+    marginHorizontal: 0,
     paddingVertical: 6,
-    paddingHorizontal: 12,
     borderRadius: 16,
   },
   selectedDateItem: {

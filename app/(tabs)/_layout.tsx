@@ -1,9 +1,8 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
-
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -29,35 +28,45 @@ export default function TabLayout() {
         name="today"
         options={{
           title: 'Today',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle.portrait.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialIcons name="today" size={28} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="habits"
         options={{
           title: 'Habits',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="star.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialIcons name="star" size={28} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
           title: 'Tasks',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="checkmark.circle.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name="checkmark-done-circle" size={28} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="categories"
         options={{
           title: 'Categories',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="square.grid.2x2.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <MaterialIcons name="category" size={28} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="timer"
         options={{
           title: 'Timer',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="timer" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name="timer" size={28} color={color} />
+          ),
         }}
       />
     </Tabs>
