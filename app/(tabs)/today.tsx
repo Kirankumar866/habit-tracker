@@ -17,7 +17,19 @@ function getWeekDates(centerDate: Date) {
   return week;
 }
 
-const tasks = [
+type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
+
+type TaskType = {
+  id: string;
+  title: string;
+  type: string;
+  time: string;
+  icon: MaterialIconName;
+  completed: boolean;
+  failed: boolean;
+};
+
+const tasks: TaskType[] = [
   {
     id: '1',
     title: 'Meditation',
@@ -59,7 +71,7 @@ export default function TodayScreen() {
   centerDate.setDate(today.getDate() + weekOffset * 7);
   const weekDates = getWeekDates(centerDate);
 
-  const toggleTask = (id, type) => {
+  const toggleTask = (id: string, type: string) => {
     setTaskList((prev) =>
       prev.map((task) =>
         task.id === id
