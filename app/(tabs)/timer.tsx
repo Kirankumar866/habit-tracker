@@ -175,6 +175,20 @@ export default function TimerScreen() {
   // Responsive font size
   const timerFontSize = Math.min(dimensions.width, dimensions.height) * 0.18;
 
+  // Start/Stop handler (no pickers)
+  const handleStartStop = () => {
+    setIsRunning((r) => !r);
+  };
+
+  // Reset handler
+  const handleReset = () => {
+    if (mode === 'pomodoro') setSeconds(durations.pomodoro);
+    else if (mode === 'short') setSeconds(durations.short);
+    else if (mode === 'long') setSeconds(durations.long);
+    else if (mode === 'stopwatch') setSwSeconds(0);
+    setIsRunning(false);
+  };
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: COLORS[mode] }]}> 
       {/* Top Tabs */}
@@ -193,16 +207,25 @@ export default function TimerScreen() {
       </View>
       {/* Centered Timer and Button */}
       <View style={styles.centerBox}>
-        <Text style={[styles.timerText, { fontSize: timerFontSize }]}>
+        <Text style={[styles.timerText, { fontSize: timerFontSize }]}> 
           {mode === 'stopwatch' ? formatTime(swSeconds) : formatTime(seconds)}
         </Text>
-        <TouchableOpacity
-          style={styles.startBtn}
-          onPress={() => setIsRunning((r) => !r)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.startBtnText}>{isRunning ? 'STOP' : 'START'}</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.startBtn}
+            onPress={handleStartStop}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.startBtnText}>{isRunning ? 'STOP' : 'START'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.resetBtn}
+            onPress={handleReset}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.resetBtnText}>RESET</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       {/* Floating Rotate Button */}
       <TouchableOpacity style={styles.fabRotateBtn} onPress={handleRotate} activeOpacity={0.85}>
@@ -250,7 +273,7 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     paddingHorizontal: SPACING,
-    paddingTop: SPACING,
+    paddingTop: 48,
     backgroundColor: COLORS.pomodoro,
   },
   tabsRow: {
@@ -342,56 +365,56 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    padding: 24,
+    padding: 12, // reduced from 24
     width: 320,
     maxWidth: '90%',
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 16, // reduced from 20
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 10, // reduced from 16
     color: COLORS.text,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 6, // reduced from 12
     width: '100%',
     justifyContent: 'space-between',
   },
   inputLabel: {
-    fontSize: 16,
+    fontSize: 14, // reduced from 16
     color: COLORS.text,
-    width: 120,
+    width: 100, // reduced from 120
   },
   input: {
     backgroundColor: '#f0f0f0',
     borderRadius: 8,
-    padding: 8,
-    width: 60,
+    padding: 6, // reduced from 8
+    width: 48, // reduced from 60
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 14, // reduced from 16
     color: COLORS.text,
   },
   modalBtnRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginTop: 16,
+    marginTop: 10, // reduced from 16
   },
   modalBtn: {
     flex: 1,
     backgroundColor: COLORS.pomodoro,
     borderRadius: 8,
-    paddingVertical: 10,
-    marginHorizontal: 8,
+    paddingVertical: 8, // reduced from 10
+    marginHorizontal: 6, // reduced from 8
     alignItems: 'center',
   },
   modalBtnText: {
     color: COLORS.white,
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 14, // reduced from 16
   },
   fabRotateBtn: {
     position: 'absolute',
@@ -408,5 +431,29 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING * 2,
+  },
+  resetBtn: {
+    backgroundColor: '#fff',
+    borderRadius: BUTTON_RADIUS,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    marginLeft: 16,
+    elevation: 2,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.13,
+    shadowRadius: 6,
+  },
+  resetBtnText: {
+    color: COLORS.pomodoro,
+    fontSize: 20,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 }); 
