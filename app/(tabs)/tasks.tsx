@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput, Switch, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const PRIMARY = '#F06292';
 const BG = '#151718';
@@ -14,6 +15,173 @@ const TASKS_KEY = 'TASKS_LIST';
 function getTodayStr() {
   const d = new Date();
   return d.toISOString().split('T')[0];
+}
+
+function AddTypeModal({ visible, onClose, onSelectTask }: { visible: boolean; onClose: () => void; onSelectTask: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
+        <View style={styles.addTypeSheet}>
+          <TouchableOpacity style={styles.addTypeBtn}>
+            <FontAwesome5 name="trophy" size={24} color={PRIMARY} style={{ marginRight: 16 }} />
+            <View>
+              <Text style={styles.addTypeTitle}>Habit</Text>
+              <Text style={styles.addTypeDesc}>Activity that repeats over time. It has detailed tracking and statistics.</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addTypeBtn}>
+            <MaterialIcons name="repeat" size={24} color={PRIMARY} style={{ marginRight: 16 }} />
+            <View>
+              <Text style={styles.addTypeTitle}>Recurring Task</Text>
+              <Text style={styles.addTypeDesc}>Activity that repeats over time without tracking or statistics.</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addTypeBtn} onPress={onSelectTask}>
+            <MaterialIcons name="check-circle" size={24} color={PRIMARY} style={{ marginRight: 16 }} />
+            <View>
+              <Text style={styles.addTypeTitle}>Task</Text>
+              <Text style={styles.addTypeDesc}>Single instance activity without tracking over time.</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+function AddTaskModal({
+  visible,
+  onClose,
+  newTask,
+  setNewTask,
+  checklist,
+  setChecklist,
+  checkInput,
+  setCheckInput,
+  onConfirm
+}: {
+  visible: boolean;
+  onClose: () => void;
+  newTask: any;
+  setNewTask: (t: any) => void;
+  checklist: string[];
+  setChecklist: (c: string[]) => void;
+  checkInput: string;
+  setCheckInput: (s: string) => void;
+  onConfirm: () => void;
+}) {
+  const [showDatePicker, setShowDatePicker] = React.useState(false);
+  const today = new Date();
+  const selectedDate = newTask.date ? new Date(newTask.date) : today;
+  const isToday = selectedDate.toDateString() === today.toDateString();
+  function formatDate(date: Date) {
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    return date.toISOString().split('T')[0];
+  }
+  return (
+    <Modal visible={visible} animationType="slide">
+      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BG }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={styles.taskModalHeader}>
+            <Text style={styles.taskModalTitle}>New Task</Text>
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Task</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Task"
+              placeholderTextColor={INACTIVE}
+              value={newTask.name}
+              onChangeText={v => setNewTask({ ...newTask, name: v })}
+            />
+          </View>
+          <View style={styles.rowBetween}>
+            <View style={styles.inputGroupRow}>
+              <MaterialIcons name="category" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
+              <Text style={styles.inputLabel}>Category</Text>
+            </View>
+            <TouchableOpacity style={styles.categoryBtn}>
+              <Text style={styles.categoryBtnText}>Task</Text>
+              <MaterialIcons name="access-time" size={20} color={PRIMARY} style={{ marginLeft: 8 }} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.rowBetween}>
+            <View style={styles.inputGroupRow}>
+              <MaterialIcons name="date-range" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
+              <Text style={styles.inputLabel}>Date</Text>
+            </View>
+            <TouchableOpacity style={styles.categoryBtn} onPress={() => setShowDatePicker(true)}>
+              <Text style={styles.categoryBtnText}>{formatDate(selectedDate)}</Text>
+            </TouchableOpacity>
+          </View>
+          {showDatePicker && (
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              minimumDate={today}
+              onChange={(event, date) => {
+                setShowDatePicker(false);
+                if (date) {
+                  setNewTask({ ...newTask, date: date.toISOString().split('T')[0] });
+                }
+              }}
+            />
+          )}
+          <View style={styles.rowBetween}>
+            <View style={styles.inputGroupRow}>
+              <MaterialIcons name="notifications" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
+              <Text style={styles.inputLabel}>Time and reminders</Text>
+            </View>
+            <TouchableOpacity style={styles.categoryBtn}>
+              <Text style={styles.categoryBtnText}>0</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.rowBetween}>
+            <View style={styles.inputGroupRow}>
+              <MaterialIcons name="flag" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
+              <Text style={styles.inputLabel}>Priority</Text>
+            </View>
+            <TouchableOpacity style={styles.categoryBtn}>
+              <Text style={styles.categoryBtnText}>Default</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Note</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Note"
+              placeholderTextColor={INACTIVE}
+              value={newTask.note}
+              onChangeText={v => setNewTask({ ...newTask, note: v })}
+              multiline
+            />
+          </View>
+          <View style={styles.rowBetween}>
+            <View style={styles.inputGroupRow}>
+              <MaterialIcons name="event-note" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
+              <Text style={styles.inputLabel}>Pending task</Text>
+            </View>
+            <TouchableOpacity onPress={() => setNewTask({ ...newTask, pending: !newTask.pending })}>
+              {newTask.pending ? (
+                <MaterialIcons name="check-circle" size={32} color="#F06292" />
+              ) : (
+                <MaterialIcons name="access-time" size={32} color="#757575" />
+              )}
+            </TouchableOpacity>
+          </View>
+          <View style={styles.modalBtnRow}>
+            <TouchableOpacity style={styles.modalBtnCancel} onPress={onClose}>
+              <Text style={styles.modalBtnCancelText}>CANCEL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalBtnConfirm} onPress={onConfirm}>
+              <Text style={styles.modalBtnConfirmText}>CONFIRM</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
 }
 
 export default function TasksScreen() {
@@ -57,174 +225,6 @@ export default function TasksScreen() {
     setChecklist([]);
     setCheckInput('');
   };
-
-  // UI for add type modal
-  const AddTypeModal = () => (
-    <Modal visible={showAddType} transparent animationType="slide">
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAddType(false)}>
-        <View style={styles.addTypeSheet}>
-          <TouchableOpacity style={styles.addTypeBtn}>
-            <FontAwesome5 name="trophy" size={24} color={PRIMARY} style={{ marginRight: 16 }} />
-            <View>
-              <Text style={styles.addTypeTitle}>Habit</Text>
-              <Text style={styles.addTypeDesc}>Activity that repeats over time. It has detailed tracking and statistics.</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addTypeBtn}>
-            <MaterialIcons name="repeat" size={24} color={PRIMARY} style={{ marginRight: 16 }} />
-            <View>
-              <Text style={styles.addTypeTitle}>Recurring Task</Text>
-              <Text style={styles.addTypeDesc}>Activity that repeats over time without tracking or statistics.</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addTypeBtn} onPress={() => { setShowAddType(false); setShowTaskModal(true); }}>
-            <MaterialIcons name="check-circle" size={24} color={PRIMARY} style={{ marginRight: 16 }} />
-            <View>
-              <Text style={styles.addTypeTitle}>Task</Text>
-              <Text style={styles.addTypeDesc}>Single instance activity without tracking over time.</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-
-  // UI for add task modal
-  const AddTaskModal = () => (
-    <Modal visible={showTaskModal} animationType="slide">
-      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BG }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={styles.taskModalHeader}>
-            <Text style={styles.taskModalTitle}>New Task</Text>
-          </View>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Task</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Task"
-              placeholderTextColor={INACTIVE}
-              value={newTask.name}
-              onChangeText={v => setNewTask({ ...newTask, name: v })}
-            />
-          </View>
-          <View style={styles.rowBetween}>
-            <View style={styles.inputGroupRow}>
-              <MaterialIcons name="category" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
-              <Text style={styles.inputLabel}>Category</Text>
-            </View>
-            <TouchableOpacity style={styles.categoryBtn}>
-              <Text style={styles.categoryBtnText}>Task</Text>
-              <MaterialIcons name="access-time" size={20} color={PRIMARY} style={{ marginLeft: 8 }} />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.rowBetween}>
-            <View style={styles.inputGroupRow}>
-              <MaterialIcons name="date-range" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
-              <Text style={styles.inputLabel}>Date</Text>
-            </View>
-            <TouchableOpacity style={styles.categoryBtn}>
-              <Text style={styles.categoryBtnText}>Today</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.rowBetween}>
-            <View style={styles.inputGroupRow}>
-              <MaterialIcons name="notifications" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
-              <Text style={styles.inputLabel}>Time and reminders</Text>
-            </View>
-            <TouchableOpacity style={styles.categoryBtn}>
-              <Text style={styles.categoryBtnText}>0</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.rowBetween}>
-            <View style={styles.inputGroupRow}>
-              <MaterialIcons name="checklist" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
-              <Text style={styles.inputLabel}>Checklist</Text>
-            </View>
-            <TouchableOpacity style={styles.categoryBtn}>
-              <Text style={[styles.categoryBtnText, { color: INACTIVE }]}>0</Text>
-            </TouchableOpacity>
-          </View>
-          {/* Checklist functional */}
-          <View style={styles.checklistBox}>
-            {checklist.map((item, idx) => (
-              <View key={idx} style={styles.checkItemRow}>
-                <Text style={styles.checkItemText}>{item}</Text>
-                <TouchableOpacity onPress={() => setChecklist(checklist.filter((_, i) => i !== idx))}>
-                  <MaterialIcons name="close" size={20} color={PRIMARY} />
-                </TouchableOpacity>
-              </View>
-            ))}
-            <View style={styles.checkAddRow}>
-              <TextInput
-                style={styles.checkInput}
-                placeholder="Add item"
-                placeholderTextColor={INACTIVE}
-                value={checkInput}
-                onChangeText={setCheckInput}
-                onSubmitEditing={() => {
-                  if (checkInput.trim()) {
-                    setChecklist([...checklist, checkInput.trim()]);
-                    setCheckInput('');
-                  }
-                }}
-              />
-              <TouchableOpacity
-                onPress={() => {
-                  if (checkInput.trim()) {
-                    setChecklist([...checklist, checkInput.trim()]);
-                    setCheckInput('');
-                  }
-                }}
-                style={styles.checkAddBtn}
-              >
-                <MaterialIcons name="add" size={20} color={PRIMARY} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.rowBetween}>
-            <View style={styles.inputGroupRow}>
-              <MaterialIcons name="flag" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
-              <Text style={styles.inputLabel}>Priority</Text>
-            </View>
-            <TouchableOpacity style={styles.categoryBtn}>
-              <Text style={styles.categoryBtnText}>Default</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Note</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Note"
-              placeholderTextColor={INACTIVE}
-              value={newTask.note}
-              onChangeText={v => setNewTask({ ...newTask, note: v })}
-              multiline
-            />
-          </View>
-          <View style={styles.rowBetween}>
-            <View style={styles.inputGroupRow}>
-              <MaterialIcons name="event-note" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
-              <Text style={styles.inputLabel}>Pending task</Text>
-            </View>
-            <Switch
-              value={newTask.pending}
-              onValueChange={v => setNewTask({ ...newTask, pending: v })}
-              trackColor={{ true: PRIMARY, false: CARD }}
-              thumbColor={newTask.pending ? PRIMARY : '#fff'}
-            />
-          </View>
-          <View style={styles.modalBtnRow}>
-            <TouchableOpacity style={styles.modalBtnCancel} onPress={() => { setShowTaskModal(false); setShowAddType(false); }}>
-              <Text style={styles.modalBtnCancelText}>CANCEL</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalBtnConfirm} onPress={handleConfirm}>
-              <Text style={styles.modalBtnConfirmText}>CONFIRM</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
 
   // Render task item
   const renderTask = ({ item }: { item: any }) => (
@@ -282,8 +282,18 @@ export default function TasksScreen() {
         <MaterialIcons name="add" size={36} color={TEXT} />
       </TouchableOpacity>
       {/* Modals */}
-      <AddTypeModal />
-      <AddTaskModal />
+      <AddTypeModal visible={showAddType} onClose={() => setShowAddType(false)} onSelectTask={() => { setShowAddType(false); setShowTaskModal(true); }} />
+      <AddTaskModal
+        visible={showTaskModal}
+        onClose={() => setShowTaskModal(false)}
+        newTask={newTask}
+        setNewTask={setNewTask}
+        checklist={checklist}
+        setChecklist={setChecklist}
+        checkInput={checkInput}
+        setCheckInput={setCheckInput}
+        onConfirm={handleConfirm}
+      />
     </View>
   );
 }
@@ -412,7 +422,7 @@ const styles = StyleSheet.create({
   taskModalTitle: {
     color: TEXT,
     fontWeight: 'bold',
-    fontSize: 28,
+    fontSize: 22,
   },
   inputGroup: {
     marginHorizontal: 24,
@@ -511,7 +521,7 @@ const styles = StyleSheet.create({
   modalBtnCancelText: {
     color: INACTIVE,
     fontWeight: 'bold',
-    fontSize: 18,
+    fontSize: 16,
   },
   modalBtnConfirm: {
     flex: 1,
@@ -524,7 +534,7 @@ const styles = StyleSheet.create({
   modalBtnConfirmText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 18,
+    fontSize: 16,
   },
   emptyText: {
     color: INACTIVE,
