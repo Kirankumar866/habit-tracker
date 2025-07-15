@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput, Switch, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput, Switch, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Notifications from 'expo-notifications';
+import { Modal as RNModal } from 'react-native';
 
 const PRIMARY = '#F06292';
 const BG = '#151718';
@@ -58,7 +60,8 @@ function AddTaskModal({
   setChecklist,
   checkInput,
   setCheckInput,
-  onConfirm
+  onConfirm,
+  editMode
 }: {
   visible: boolean;
   onClose: () => void;
@@ -69,8 +72,15 @@ function AddTaskModal({
   checkInput: string;
   setCheckInput: (s: string) => void;
   onConfirm: () => void;
+  editMode: boolean;
 }) {
   const [showDatePicker, setShowDatePicker] = React.useState(false);
+  const [showReminderModal, setShowReminderModal] = React.useState(false);
+  const [showNewReminderModal, setShowNewReminderModal] = React.useState(false);
+  const [reminderTime, setReminderTime] = React.useState(new Date());
+  const [showTimePicker, setShowTimePicker] = React.useState(false);
+  const [reminderType, setReminderType] = React.useState<'none' | 'notification' | 'alarm'>('notification');
+  const [reminderSchedule, setReminderSchedule] = React.useState<'always' | 'days' | 'before'>('always');
   const today = new Date();
   const selectedDate = newTask.date ? new Date(newTask.date) : today;
   const isToday = selectedDate.toDateString() === today.toDateString();
@@ -78,12 +88,65 @@ function AddTaskModal({
     if (date.toDateString() === today.toDateString()) return 'Today';
     return date.toISOString().split('T')[0];
   }
+  function formatTime(date: Date) {
+    let h = date.getHours();
+    let m = date.getMinutes();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ampm}`;
+  }
+  // Save reminder to newTask and schedule notification
+  const handleConfirmReminder = async () => {
+    let notificationId = null;
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      // Request permissions
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please enable notifications in your settings.');
+        return;
+      }
+      // Schedule notification
+      const now = new Date();
+      let triggerDate = new Date(selectedDate);
+      triggerDate.setHours(reminderTime.getHours());
+      triggerDate.setMinutes(reminderTime.getMinutes());
+      triggerDate.setSeconds(0);
+      if (triggerDate < now) {
+        // If the time is in the past for today, schedule for tomorrow
+        triggerDate.setDate(triggerDate.getDate() + 1);
+      }
+      notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Task Reminder',
+          body: newTask.name ? `It's time for: ${newTask.name}` : 'You have a scheduled task!',
+          sound: true,
+        },
+        trigger: triggerDate,
+      });
+    } else {
+      Alert.alert('Not supported', 'Reminders are only available on iOS and Android.');
+    }
+    setNewTask({
+      ...newTask,
+      reminder: {
+        time: reminderTime.toTimeString().slice(0, 5),
+        type: reminderType,
+        schedule: reminderSchedule,
+        notificationId,
+      },
+    });
+    setShowNewReminderModal(false);
+    setShowReminderModal(false);
+  };
+  // Add a ref for the web time input
+  const webTimeInputRef = React.useRef<HTMLInputElement>(null);
   return (
     <Modal visible={visible} animationType="slide">
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BG }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
           <View style={styles.taskModalHeader}>
-            <Text style={styles.taskModalTitle}>New Task</Text>
+            <Text style={styles.taskModalTitle}>{editMode ? 'Edit Task' : 'New Task'}</Text>
           </View>
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Task</Text>
@@ -133,10 +196,114 @@ function AddTaskModal({
               <MaterialIcons name="notifications" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
               <Text style={styles.inputLabel}>Time and reminders</Text>
             </View>
-            <TouchableOpacity style={styles.categoryBtn}>
-              <Text style={styles.categoryBtnText}>0</Text>
+            <TouchableOpacity style={styles.categoryBtn} onPress={() => setShowReminderModal(true)}>
+              <Text style={styles.categoryBtnText}>{newTask.reminder ? formatTime(new Date(today.toDateString() + 'T' + newTask.reminder.time + ':00')) : '0'}</Text>
             </TouchableOpacity>
           </View>
+          {/* Reminder Modal */}
+          <Modal visible={showReminderModal} transparent animationType="fade">
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+              <View style={{ backgroundColor: CARD, borderRadius: 24, padding: 32, width: 320, alignItems: 'center' }}>
+                <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 20, marginBottom: 16 }}>Time and reminders</Text>
+                <MaterialIcons name="notifications" size={64} color={PRIMARY} style={{ marginBottom: 16 }} />
+                <Text style={{ color: INACTIVE, fontSize: 16, marginBottom: 16 }}>No reminders for this activity</Text>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }} onPress={() => { setShowReminderModal(false); setShowNewReminderModal(true); }}>
+                  <MaterialIcons name="add-circle-outline" size={24} color={PRIMARY} style={{ marginRight: 8 }} />
+                  <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16 }}>NEW REMINDER</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setShowReminderModal(false)}>
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>CLOSE</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+          {/* New Reminder Modal */}
+          <Modal visible={showNewReminderModal} transparent animationType="fade">
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+              <View style={{ backgroundColor: CARD, borderRadius: 24, padding: 32, width: 340, alignItems: 'center' }}>
+                <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 20, marginBottom: 16 }}>New reminder</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (Platform.OS === 'web') {
+                      webTimeInputRef.current?.focus();
+                    } else {
+                      setShowTimePicker(true);
+                    }
+                  }}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 36 }}>{formatTime(reminderTime)}</Text>
+                  <Text style={{ color: PRIMARY, fontSize: 16, textAlign: 'center' }}>Reminder time</Text>
+                </TouchableOpacity>
+                {/* Native time picker for iOS/Android */}
+                {showTimePicker && Platform.OS !== 'web' && (
+                  <DateTimePicker
+                    value={reminderTime}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, date) => {
+                      setShowTimePicker(false);
+                      if (date) setReminderTime(date);
+                    }}
+                  />
+                )}
+                {/* Web time picker */}
+                {Platform.OS === 'web' && (
+                  <input
+                    ref={webTimeInputRef}
+                    type="time"
+                    style={{ fontSize: 24, marginBottom: 16, background: 'transparent', color: PRIMARY, border: 'none', outline: 'none', textAlign: 'center' }}
+                    value={reminderTime.toTimeString().slice(0,5)}
+                    onChange={e => {
+                      const [h, m] = e.target.value.split(':');
+                      const newDate = new Date(reminderTime);
+                      newDate.setHours(Number(h));
+                      newDate.setMinutes(Number(m));
+                      setReminderTime(newDate);
+                    }}
+                  />
+                )}
+                <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16, marginTop: 8, marginBottom: 8 }}>Reminder type</Text>
+                <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+                  <TouchableOpacity onPress={() => setReminderType('none')} style={{ flex: 1, alignItems: 'center', padding: 8, backgroundColor: reminderType === 'none' ? CARD : 'transparent', borderRadius: 8 }}>
+                    <MaterialIcons name="notifications-off" size={28} color={reminderType === 'none' ? PRIMARY : INACTIVE} />
+                    <Text style={{ color: reminderType === 'none' ? PRIMARY : INACTIVE, fontSize: 13 }}>Don't remind</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setReminderType('notification')} style={{ flex: 1, alignItems: 'center', padding: 8, backgroundColor: reminderType === 'notification' ? CARD : 'transparent', borderRadius: 8 }}>
+                    <MaterialIcons name="notifications" size={28} color={reminderType === 'notification' ? PRIMARY : INACTIVE} />
+                    <Text style={{ color: reminderType === 'notification' ? PRIMARY : INACTIVE, fontSize: 13 }}>Notification</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setReminderType('alarm')} style={{ flex: 1, alignItems: 'center', padding: 8, backgroundColor: reminderType === 'alarm' ? CARD : 'transparent', borderRadius: 8 }}>
+                    <MaterialIcons name="alarm" size={28} color={reminderType === 'alarm' ? PRIMARY : INACTIVE} />
+                    <Text style={{ color: reminderType === 'alarm' ? PRIMARY : INACTIVE, fontSize: 13 }}>Alarm</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16, marginTop: 8, marginBottom: 8 }}>Reminder schedule</Text>
+                <View style={{ width: '100%', marginBottom: 16 }}>
+                  <TouchableOpacity onPress={() => setReminderSchedule('always')} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <MaterialIcons name={reminderSchedule === 'always' ? 'radio-button-checked' : 'radio-button-unchecked'} size={22} color={reminderSchedule === 'always' ? PRIMARY : INACTIVE} style={{ marginRight: 8 }} />
+                    <Text style={{ color: reminderSchedule === 'always' ? PRIMARY : TEXT, fontSize: 15 }}>Always enabled</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setReminderSchedule('days')} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <MaterialIcons name={reminderSchedule === 'days' ? 'radio-button-checked' : 'radio-button-unchecked'} size={22} color={reminderSchedule === 'days' ? PRIMARY : INACTIVE} style={{ marginRight: 8 }} />
+                    <Text style={{ color: reminderSchedule === 'days' ? PRIMARY : TEXT, fontSize: 15 }}>Specific days of the week</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setReminderSchedule('before')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialIcons name={reminderSchedule === 'before' ? 'radio-button-checked' : 'radio-button-unchecked'} size={22} color={reminderSchedule === 'before' ? PRIMARY : INACTIVE} style={{ marginRight: 8 }} />
+                    <Text style={{ color: reminderSchedule === 'before' ? PRIMARY : TEXT, fontSize: 15 }}>Days before</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flexDirection: 'row', width: '100%', marginTop: 16 }}>
+                  <TouchableOpacity style={{ flex: 1, backgroundColor: CARD, borderRadius: 12, paddingVertical: 14, marginRight: 8, alignItems: 'center' }} onPress={onClose}>
+                    <Text style={{ color: INACTIVE, fontWeight: 'bold', fontSize: 16 }}>CANCEL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={{ flex: 1, backgroundColor: PRIMARY, borderRadius: 12, paddingVertical: 14, marginLeft: 8, alignItems: 'center' }} onPress={handleConfirmReminder}>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>CONFIRM</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
           <View style={styles.rowBetween}>
             <View style={styles.inputGroupRow}>
               <MaterialIcons name="flag" size={24} color={PRIMARY} style={{ marginRight: 12 }} />
@@ -201,6 +368,14 @@ export default function TasksScreen() {
   });
   const [checklist, setChecklist] = useState<string[]>([]);
   const [checkInput, setCheckInput] = useState('');
+  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [showTaskDetail, setShowTaskDetail] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  // Add a state to track if reschedule mode is active
+  const [rescheduleMode, setRescheduleMode] = useState(false);
+  // Add a state for showing the reschedule time picker and the task being rescheduled
+  const [showRescheduleTimePicker, setShowRescheduleTimePicker] = useState(false);
+  const [rescheduleTask, setRescheduleTask] = useState<any | null>(null);
 
   // Load tasks from storage
   useEffect(() => {
@@ -215,10 +390,40 @@ export default function TasksScreen() {
     AsyncStorage.setItem(TASKS_KEY, JSON.stringify(newTasks));
   };
 
-  // Add new task
+  // Delete task handler
+  const handleDeleteTask = () => {
+    if (selectedTask) {
+      setTasks(tasks.filter(t => t.id !== selectedTask.id));
+      setShowTaskDetail(false);
+      setSelectedTask(null);
+    }
+  };
+  // Edit task handler
+  const handleEditTask = () => {
+    if (selectedTask) {
+      setNewTask(selectedTask);
+      setShowTaskModal(true);
+      setEditMode(true);
+      setShowTaskDetail(false);
+    }
+  };
+  // Reschedule handler
+  const handleRescheduleTask = () => {
+    if (selectedTask) {
+      setRescheduleTask(selectedTask);
+      setShowRescheduleTimePicker(true);
+      setShowTaskDetail(false);
+    }
+  };
+  // Update task on confirm (edit mode)
   const handleConfirm = () => {
-    const task = { ...newTask, checklist };
-    saveTasks([{ ...task, id: Date.now().toString() }, ...tasks]);
+    if (editMode) {
+      setTasks(tasks.map(t => t.id === newTask.id ? { ...newTask } : t));
+      setEditMode(false);
+    } else {
+      const task = { ...newTask, checklist };
+      setTasks([{ ...task, id: Date.now().toString() }, ...tasks]);
+    }
     setShowTaskModal(false);
     setShowAddType(false);
     setNewTask({ name: '', category: '', date: getTodayStr(), time: '', checklist: [], priority: 'Default', note: '', pending: true });
@@ -226,18 +431,55 @@ export default function TasksScreen() {
     setCheckInput('');
   };
 
+  // Handler for confirming new time
+  const handleRescheduleTime = (event, date) => {
+    setShowRescheduleTimePicker(false);
+    if (date && rescheduleTask) {
+      // Update the reminder time in the tasks list and AsyncStorage
+      const newTime = date.toTimeString().slice(0, 5);
+      const updatedTasks = tasks.map(t =>
+        t.id === rescheduleTask.id
+          ? { ...t, reminder: { ...t.reminder, time: newTime } }
+          : t
+      );
+      setTasks(updatedTasks);
+      AsyncStorage.setItem(TASKS_KEY, JSON.stringify(updatedTasks));
+      setRescheduleTask(null);
+    }
+  };
+
   // Render task item
   const renderTask = ({ item }: { item: any }) => (
-    <View style={styles.taskItemRow}>
-      <View style={styles.taskIconBox}><MaterialIcons name="access-time" size={28} color={PRIMARY} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.taskTitle}>{item.name}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-          <MaterialIcons name="access-time" size={16} color={INACTIVE} style={{ marginRight: 4 }} />
-          <Text style={styles.taskTime}>{item.time || '12:00 PM'}</Text>
+    <TouchableOpacity
+      onLongPress={() => {
+        setSelectedTask(item);
+        setShowTaskDetail(true);
+      }}
+      activeOpacity={0.85}
+    >
+      <View style={styles.taskItemRow}>
+        <View style={styles.taskIconBox}><MaterialIcons name="access-time" size={28} color={PRIMARY} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.taskTitle}>{item.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+            <MaterialIcons name="access-time" size={16} color={INACTIVE} style={{ marginRight: 4 }} />
+            <Text style={styles.taskTime}>
+              {item.reminder && item.reminder.time
+                ? (() => {
+                    const [h, m] = item.reminder.time.split(":");
+                    let hour = parseInt(h, 10);
+                    const min = m.padStart(2, "0");
+                    const ampm = hour >= 12 ? "PM" : "AM";
+                    hour = hour % 12;
+                    hour = hour ? hour : 12;
+                    return `${hour.toString().padStart(2, "0")}:${min} ${ampm}`;
+                  })()
+                : "--:--"}
+            </Text>
+          </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -293,7 +535,78 @@ export default function TasksScreen() {
         checkInput={checkInput}
         setCheckInput={setCheckInput}
         onConfirm={handleConfirm}
+        editMode={editMode}
       />
+      {/* Task Detail Bottom Sheet */}
+      <RNModal
+        visible={showTaskDetail}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTaskDetail(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: CARD, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, minHeight: 320 }}>
+            {selectedTask && (
+              <>
+                <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 22, marginBottom: 8 }}>{selectedTask.name}</Text>
+                <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16, marginBottom: 16 }}>{selectedTask.date}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <View style={{ alignItems: 'center' }}>
+                    <MaterialIcons name="access-time" size={28} color={PRIMARY} />
+                    <Text style={{ color: INACTIVE, fontSize: 13 }}>Reminders</Text>
+                    <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 16 }}>
+                      {selectedTask.reminder && selectedTask.reminder.time
+                        ? (() => {
+                            const [h, m] = selectedTask.reminder.time.split(":");
+                            let hour = parseInt(h, 10);
+                            const min = m.padStart(2, "0");
+                            const ampm = hour >= 12 ? "PM" : "AM";
+                            hour = hour % 12;
+                            hour = hour ? hour : 12;
+                            return `${hour.toString().padStart(2, "0")}:${min} ${ampm}`;
+                          })()
+                        : "--:--"}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'center' }}>
+                    <MaterialIcons name="notes" size={28} color={PRIMARY} />
+                    <Text style={{ color: INACTIVE, fontSize: 13 }}>Note</Text>
+                    <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 16 }}>{selectedTask.note || '-'}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity style={{ marginVertical: 8 }} onPress={handleRescheduleTask}>
+                  <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16 }}>Reschedule</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginVertical: 8 }} onPress={handleDeleteTask}>
+                  <Text style={{ color: INACTIVE, fontWeight: 'bold', fontSize: 16 }}>Delete</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginVertical: 8 }} onPress={handleEditTask}>
+                  <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 16 }}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 16, alignSelf: 'center' }} onPress={() => setShowTaskDetail(false)}>
+                  <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16 }}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </RNModal>
+      {/* Reschedule Time Picker */}
+      {showRescheduleTimePicker && (
+        <DateTimePicker
+          value={rescheduleTask && rescheduleTask.reminder && rescheduleTask.reminder.time ? (() => {
+            const [h, m] = rescheduleTask.reminder.time.split(":");
+            const d = new Date();
+            d.setHours(Number(h));
+            d.setMinutes(Number(m));
+            d.setSeconds(0);
+            return d;
+          })() : new Date()}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleRescheduleTime}
+        />
+      )}
     </View>
   );
 }
