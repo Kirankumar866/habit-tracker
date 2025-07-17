@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const windowWidth = Dimensions.get('window').width;
 
@@ -17,52 +18,23 @@ function getWeekDates(centerDate: Date) {
   return week;
 }
 
+const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
 
 type TaskType = {
   id: string;
-  title: string;
+  name: string; // match Tasks tab
   type: string;
-  time: string;
-  icon: MaterialIconName;
-  completed: boolean;
-  failed: boolean;
+  date: string;
+  reminder?: { time: string };
+  note?: string;
+  completed?: boolean;
+  failed?: boolean;
 };
 
-const tasks: TaskType[] = [
-  {
-    id: '1',
-    title: 'Meditation',
-    type: 'Task',
-    time: '06:00 AM',
-    icon: 'access-time',
-    completed: false,
-    failed: false,
-  },
-  {
-    id: '2',
-    title: 'Smoking',
-    type: 'Habit',
-    time: '12:00 PM',
-    icon: 'block',
-    completed: false,
-    failed: true,
-  },
-  {
-    id: '3',
-    title: 'Drink water',
-    type: 'Task',
-    time: '06:00 PM',
-    icon: 'access-time',
-    completed: true,
-    failed: false,
-  },
-];
-
-const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 export default function TodayScreen() {
-  const [taskList, setTaskList] = useState(tasks);
+  const [taskList, setTaskList] = useState<TaskType[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -70,6 +42,30 @@ export default function TodayScreen() {
   const centerDate = new Date();
   centerDate.setDate(today.getDate() + weekOffset * 7);
   const weekDates = getWeekDates(centerDate);
+
+  // Load tasks from AsyncStorage and filter by selectedDate
+  React.useEffect(() => {
+    AsyncStorage.getItem('TASKS_LIST').then(data => {
+      if (data) {
+        const allTasks = JSON.parse(data);
+        console.log('Loaded tasks from storage:', allTasks); // DEBUG
+        // Use local date string for selectedDate
+        const d = selectedDate;
+        const year = d.getFullYear();
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        const day = d.getDate().toString().padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        const filtered = allTasks.filter((t: TaskType) => {
+          if (!t || !t.date) return false;
+          return t.date.trim() === dateStr.trim();
+        });
+        console.log('Filtered tasks for', dateStr, filtered); // DEBUG
+        setTaskList(filtered);
+      } else {
+        setTaskList([]);
+      }
+    });
+  }, [selectedDate, weekOffset]);
 
   const toggleTask = (id: string, type: string) => {
     setTaskList((prev) =>
@@ -147,14 +143,28 @@ export default function TodayScreen() {
         renderItem={({ item }) => (
           <View style={styles.taskItem}>
             <View style={styles.taskIconBox}>
-              <MaterialIcons name={item.icon} size={28} color="#F06292" />
+              <MaterialIcons name={item.type === 'Habit' ? 'block' : 'access-time'} size={28} color="#F06292" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.taskTitle}>{item.title}</Text>
+              <Text style={styles.taskTitle}>{item.name}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                 <Text style={[styles.taskType, item.type === 'Habit' ? styles.habitType : styles.taskType]}>{item.type}</Text>
-                <MaterialIcons name="notifications-none" size={16} color="#fff" style={{ marginLeft: 8 }} />
-                <Text style={styles.taskTime}>{item.time}</Text>
+                {item.reminder && item.reminder.time && (
+                  <MaterialIcons name="notifications-none" size={16} color="#fff" style={{ marginLeft: 8 }} />
+                )}
+                <Text style={styles.taskTime}>
+                  {item.reminder && item.reminder.time
+                    ? (() => {
+                        const [h, m] = item.reminder.time.split(":");
+                        let hour = parseInt(h, 10);
+                        const min = m.padStart(2, "0");
+                        const ampm = hour >= 12 ? "PM" : "AM";
+                        hour = hour % 12;
+                        hour = hour ? hour : 12;
+                        return `${hour.toString().padStart(2, "0")}:${min} ${ampm}`;
+                      })()
+                    : "--:--"}
+                </Text>
               </View>
             </View>
             {item.completed ? (

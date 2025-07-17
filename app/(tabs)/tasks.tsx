@@ -16,7 +16,17 @@ const TASKS_KEY = 'TASKS_LIST';
 
 function getTodayStr() {
   const d = new Date();
-  return d.toISOString().split('T')[0];
+  // Use local date string in YYYY-MM-DD format
+  const year = d.getFullYear();
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Utility to parse a local date string (YYYY-MM-DD) to a Date object in local time
+function parseLocalDateString(dateStr: string) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function AddTypeModal({ visible, onClose, onSelectTask }: { visible: boolean; onClose: () => void; onSelectTask: () => void }) {
@@ -82,11 +92,19 @@ function AddTaskModal({
   const [reminderType, setReminderType] = React.useState<'none' | 'notification' | 'alarm'>('notification');
   const [reminderSchedule, setReminderSchedule] = React.useState<'always' | 'days' | 'before'>('always');
   const today = new Date();
-  const selectedDate = newTask.date ? new Date(newTask.date) : today;
+  const selectedDate = newTask.date ? parseLocalDateString(newTask.date) : today;
   const isToday = selectedDate.toDateString() === today.toDateString();
   function formatDate(date: Date) {
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    return date.toISOString().split('T')[0];
+    const today = new Date();
+    if (
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate()
+    ) return 'Today';
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   function formatTime(date: Date) {
     let h = date.getHours();
@@ -122,7 +140,7 @@ function AddTaskModal({
           body: newTask.name ? `It's time for: ${newTask.name}` : 'You have a scheduled task!',
           sound: true,
         },
-        trigger: triggerDate,
+        trigger: triggerDate as any,
       });
     } else {
       Alert.alert('Not supported', 'Reminders are only available on iOS and Android.');
@@ -183,11 +201,15 @@ function AddTaskModal({
               mode="date"
               display={Platform.OS === 'ios' ? 'inline' : 'default'}
               minimumDate={today}
-              onChange={(event, date) => {
+              onChange={(event: any, date: Date | undefined) => {
                 setShowDatePicker(false);
-                if (date) {
-                  setNewTask({ ...newTask, date: date.toISOString().split('T')[0] });
+                if (event.type === 'set' && date) {
+                  const year = date.getFullYear();
+                  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                  const day = date.getDate().toString().padStart(2, '0');
+                  setNewTask({ ...newTask, date: `${year}-${month}-${day}` });
                 }
+                // If cancelled, do nothing (keep current date)
               }}
             />
           )}
@@ -197,7 +219,11 @@ function AddTaskModal({
               <Text style={styles.inputLabel}>Time and reminders</Text>
             </View>
             <TouchableOpacity style={styles.categoryBtn} onPress={() => setShowReminderModal(true)}>
-              <Text style={styles.categoryBtnText}>{newTask.reminder ? formatTime(new Date(today.toDateString() + 'T' + newTask.reminder.time + ':00')) : '0'}</Text>
+              <Text style={styles.categoryBtnText}>{
+                newTask.reminder && newTask.reminder.time
+                  ? formatTime(new Date(today.toDateString() + 'T' + newTask.reminder.time + ':00'))
+                  : '--:--'
+              }</Text>
             </TouchableOpacity>
           </View>
           {/* Reminder Modal */}
@@ -356,7 +382,20 @@ export default function TasksScreen() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [showAddType, setShowAddType] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [newTask, setNewTask] = useState({
+  // Default newTask object should always include 'reminder' and 'id'
+  const defaultNewTask: {
+    id?: string;
+    name: string;
+    category: string;
+    date: string;
+    time: string;
+    checklist: string[];
+    priority: string;
+    note: string;
+    pending: boolean;
+    reminder?: any;
+  } = {
+    id: undefined,
     name: '',
     category: '',
     date: getTodayStr(),
@@ -365,7 +404,9 @@ export default function TasksScreen() {
     priority: 'Default',
     note: '',
     pending: true,
-  });
+    reminder: undefined,
+  };
+  const [newTask, setNewTask] = useState(defaultNewTask);
   const [checklist, setChecklist] = useState<string[]>([]);
   const [checkInput, setCheckInput] = useState('');
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
@@ -390,14 +431,6 @@ export default function TasksScreen() {
     AsyncStorage.setItem(TASKS_KEY, JSON.stringify(newTasks));
   };
 
-  // Delete task handler
-  const handleDeleteTask = () => {
-    if (selectedTask) {
-      setTasks(tasks.filter(t => t.id !== selectedTask.id));
-      setShowTaskDetail(false);
-      setSelectedTask(null);
-    }
-  };
   // Edit task handler
   const handleEditTask = () => {
     if (selectedTask) {
@@ -418,21 +451,23 @@ export default function TasksScreen() {
   // Update task on confirm (edit mode)
   const handleConfirm = () => {
     if (editMode) {
-      setTasks(tasks.map(t => t.id === newTask.id ? { ...newTask } : t));
+      const updatedTasks = tasks.map(t => t.id === newTask.id ? { ...newTask } : t);
+      saveTasks(updatedTasks);
       setEditMode(false);
     } else {
-      const task = { ...newTask, checklist };
-      setTasks([{ ...task, id: Date.now().toString() }, ...tasks]);
+      const task = { ...newTask, id: Date.now().toString(), checklist };
+      const updatedTasks = [{ ...task }, ...tasks];
+      saveTasks(updatedTasks);
     }
     setShowTaskModal(false);
     setShowAddType(false);
-    setNewTask({ name: '', category: '', date: getTodayStr(), time: '', checklist: [], priority: 'Default', note: '', pending: true });
+    setNewTask(defaultNewTask);
     setChecklist([]);
     setCheckInput('');
   };
 
   // Handler for confirming new time
-  const handleRescheduleTime = (event, date) => {
+  const handleRescheduleTime = (event: any, date: Date | undefined) => {
     setShowRescheduleTimePicker(false);
     if (date && rescheduleTask) {
       // Update the reminder time in the tasks list and AsyncStorage
@@ -442,9 +477,18 @@ export default function TasksScreen() {
           ? { ...t, reminder: { ...t.reminder, time: newTime } }
           : t
       );
-      setTasks(updatedTasks);
-      AsyncStorage.setItem(TASKS_KEY, JSON.stringify(updatedTasks));
+      saveTasks(updatedTasks);
       setRescheduleTask(null);
+    }
+  };
+
+  // Delete task handler
+  const handleDeleteTask = () => {
+    if (selectedTask) {
+      const updatedTasks = tasks.filter(t => t.id !== selectedTask.id);
+      saveTasks(updatedTasks);
+      setShowTaskDetail(false);
+      setSelectedTask(null);
     }
   };
 
@@ -462,7 +506,13 @@ export default function TasksScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.taskTitle}>{item.name}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-            <MaterialIcons name="access-time" size={16} color={INACTIVE} style={{ marginRight: 4 }} />
+            {/* Task type label */}
+            <Text style={[styles.taskType, { marginRight: 8 }]}>{item.type || 'Task'}</Text>
+            {/* Reminder icon if set */}
+            {item.reminder && item.reminder.time && (
+              <MaterialIcons name="notifications-none" size={16} color="#fff" style={{ marginRight: 8 }} />
+            )}
+            {/* Time */}
             <Text style={styles.taskTime}>
               {item.reminder && item.reminder.time
                 ? (() => {
@@ -520,11 +570,24 @@ export default function TasksScreen() {
         </View>
       )}
       {/* Floating Add Button */}
-      <TouchableOpacity style={styles.fab} onPress={() => setShowAddType(true)}>
+      <TouchableOpacity style={styles.fab} onPress={() => {
+        setNewTask({ ...defaultNewTask, id: Date.now().toString(), date: getTodayStr() });
+        setEditMode(false);
+        setShowAddType(true);
+      }}>
         <MaterialIcons name="add" size={36} color={TEXT} />
       </TouchableOpacity>
       {/* Modals */}
-      <AddTypeModal visible={showAddType} onClose={() => setShowAddType(false)} onSelectTask={() => { setShowAddType(false); setShowTaskModal(true); }} />
+      <AddTypeModal
+        visible={showAddType}
+        onClose={() => setShowAddType(false)}
+        onSelectTask={() => {
+          setShowAddType(false);
+          setNewTask({ ...defaultNewTask, id: Date.now().toString(), date: getTodayStr() });
+          setEditMode(false);
+          setShowTaskModal(true);
+        }}
+      />
       <AddTaskModal
         visible={showTaskModal}
         onClose={() => setShowTaskModal(false)}
@@ -574,16 +637,20 @@ export default function TasksScreen() {
                     <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 16 }}>{selectedTask.note || '-'}</Text>
                   </View>
                 </View>
-                <TouchableOpacity style={{ marginVertical: 8 }} onPress={handleRescheduleTask}>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }} onPress={handleRescheduleTask}>
+                  <MaterialIcons name="schedule" size={22} color={PRIMARY} style={{ marginRight: 12 }} />
                   <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16 }}>Reschedule</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ marginVertical: 8 }} onPress={handleDeleteTask}>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }} onPress={handleDeleteTask}>
+                  <MaterialIcons name="delete" size={22} color={INACTIVE} style={{ marginRight: 12 }} />
                   <Text style={{ color: INACTIVE, fontWeight: 'bold', fontSize: 16 }}>Delete</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ marginVertical: 8 }} onPress={handleEditTask}>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }} onPress={handleEditTask}>
+                  <MaterialIcons name="edit" size={22} color={TEXT} style={{ marginRight: 12 }} />
                   <Text style={{ color: TEXT, fontWeight: 'bold', fontSize: 16 }}>Edit</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ marginTop: 16, alignSelf: 'center' }} onPress={() => setShowTaskDetail(false)}>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16, alignSelf: 'center' }} onPress={() => setShowTaskDetail(false)}>
+                  <MaterialIcons name="close" size={22} color={PRIMARY} style={{ marginRight: 12 }} />
                   <Text style={{ color: PRIMARY, fontWeight: 'bold', fontSize: 16 }}>Close</Text>
                 </TouchableOpacity>
               </>
@@ -863,6 +930,15 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: INACTIVE,
     fontSize: 18,
+    fontWeight: 'bold',
+  },
+  taskType: {
+    backgroundColor: PRIMARY,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#fff',
+    fontSize: 12,
     fontWeight: 'bold',
   },
 }); 
