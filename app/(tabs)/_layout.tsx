@@ -34,29 +34,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="habits"
-        options={{
-          title: 'Habits',
-          tabBarIcon: ({ color, focused }) => (
-            <MaterialIcons name="star" size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="tasks"
         options={{
           title: 'Tasks',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name="checkmark-done-circle" size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="categories"
-        options={{
-          title: 'Categories',
-          tabBarIcon: ({ color, focused }) => (
-            <MaterialIcons name="category" size={28} color={color} />
           ),
         }}
       />

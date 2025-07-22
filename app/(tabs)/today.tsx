@@ -1,30 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const windowWidth = Dimensions.get('window').width;
-
-function getWeekDates(centerDate: Date) {
-  const week = [];
-  const dayOfWeek = centerDate.getDay();
-  const start = new Date(centerDate);
-  start.setDate(centerDate.getDate() - dayOfWeek);
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    week.push(d);
-  }
-  return week;
-}
-
-const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
+import { useFocusEffect } from '@react-navigation/native';
+import DateBar from './today/DateBar';
+import TaskItem from './today/TaskItem';
+import { getWeekDates } from './today/TodayUtils.js';
 
 type TaskType = {
   id: string;
-  name: string; // match Tasks tab
+  name: string;
   type: string;
   date: string;
   reminder?: { time: string };
@@ -39,12 +24,26 @@ export default function TodayScreen() {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const today = new Date();
+  
+  // Ensure selectedDate is always current when app opens
+  React.useEffect(() => {
+    const now = new Date();
+    console.log('Setting selectedDate to current date:', now.toDateString());
+    setSelectedDate(now);
+  }, []);
+
+  // Function to jump to today's date
+  const jumpToToday = () => {
+    const now = new Date();
+    setSelectedDate(now);
+    setWeekOffset(0); // Reset week offset to current week
+  };
   const centerDate = new Date();
   centerDate.setDate(today.getDate() + weekOffset * 7);
   const weekDates = getWeekDates(centerDate);
 
   // Load tasks from AsyncStorage and filter by selectedDate
-  React.useEffect(() => {
+  const loadTasks = React.useCallback(() => {
     AsyncStorage.getItem('TASKS_LIST').then(data => {
       if (data) {
         const allTasks = JSON.parse(data);
@@ -65,6 +64,14 @@ export default function TodayScreen() {
         setTaskList([]);
       }
     });
+  }, [selectedDate, weekOffset]);
+
+  // Load tasks when tab is focused (for sync with Tasks tab)
+  useFocusEffect(loadTasks);
+
+  // Also load tasks when selectedDate or weekOffset changes
+  React.useEffect(() => {
+    loadTasks();
   }, [selectedDate, weekOffset]);
 
   const toggleTask = (id: string, type: string) => {
@@ -88,43 +95,24 @@ export default function TodayScreen() {
         <MaterialIcons name="menu" size={32} color="#F06292" style={{ marginRight: 8 }} />
         <Text style={styles.headerTitle}>Today</Text>
         <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={jumpToToday} style={{ marginHorizontal: 8 }}>
+          <MaterialIcons name="today" size={24} color="#F06292" />
+        </TouchableOpacity>
         <Ionicons name="search" size={24} color="#fff" style={{ marginHorizontal: 8 }} />
         <MaterialIcons name="calendar-today" size={24} color="#fff" style={{ marginHorizontal: 8 }} />
         <MaterialIcons name="help-outline" size={24} color="#fff" style={{ marginHorizontal: 8 }} />
       </View>
+      
       {/* Date Bar */}
-      <View style={styles.dateBarRow}>
-        <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)}>
-          <MaterialIcons name="chevron-left" size={28} color="#fff" />
-        </TouchableOpacity>
-        <FlatList
-          data={weekDates}
-          keyExtractor={(item) => item.toISOString()}
-          horizontal
-          scrollEnabled={false}
-          contentContainerStyle={{ width: windowWidth - 100 }}
-          renderItem={({ item: d }) => {
-            const isSelected = d.toDateString() === selectedDate.toDateString();
-            const isToday = d.toDateString() === today.toDateString();
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.dateItem,
-                  { width: (windowWidth - 100) / 7 },
-                  isSelected && styles.selectedDateItem,
-                ]}
-                onPress={() => setSelectedDate(new Date(d))}
-              >
-                <Text style={[styles.dateDay, isSelected && styles.selectedDateDay, isToday && { textDecorationLine: 'underline' }]}>{dayNames[d.getDay()]}</Text>
-                <Text style={[styles.dateNum, isSelected && styles.selectedDateNum]}>{d.getDate()}</Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
-        <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)}>
-          <MaterialIcons name="chevron-right" size={28} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      <DateBar
+        weekDates={weekDates}
+        selectedDate={selectedDate}
+        today={today}
+        onDateSelect={setSelectedDate}
+        onPreviousWeek={() => setWeekOffset(weekOffset - 1)}
+        onNextWeek={() => setWeekOffset(weekOffset + 1)}
+      />
+      
       {/* Filters */}
       <View style={styles.filterRow}>
         <TouchableOpacity style={styles.filterBtnActive}>
@@ -135,54 +123,17 @@ export default function TodayScreen() {
         <TouchableOpacity style={styles.filterBtn}><MaterialIcons name="help-outline" size={20} color="#fff" /></TouchableOpacity>
         <TouchableOpacity style={styles.filterBtn}><MaterialIcons name="close" size={20} color="#fff" /></TouchableOpacity>
       </View>
+      
       {/* Task List */}
       <FlatList
         data={taskList}
         keyExtractor={(item) => item.id}
         style={{ marginTop: 10 }}
         renderItem={({ item }) => (
-          <View style={styles.taskItem}>
-            <View style={styles.taskIconBox}>
-              <MaterialIcons name={item.type === 'Habit' ? 'block' : 'access-time'} size={28} color="#F06292" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.taskTitle}>{item.name}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                <Text style={[styles.taskType, item.type === 'Habit' ? styles.habitType : styles.taskType]}>{item.type}</Text>
-                {item.reminder && item.reminder.time && (
-                  <MaterialIcons name="notifications-none" size={16} color="#fff" style={{ marginLeft: 8 }} />
-                )}
-                <Text style={styles.taskTime}>
-                  {item.reminder && item.reminder.time
-                    ? (() => {
-                        const [h, m] = item.reminder.time.split(":");
-                        let hour = parseInt(h, 10);
-                        const min = m.padStart(2, "0");
-                        const ampm = hour >= 12 ? "PM" : "AM";
-                        hour = hour % 12;
-                        hour = hour ? hour : 12;
-                        return `${hour.toString().padStart(2, "0")}:${min} ${ampm}`;
-                      })()
-                    : "--:--"}
-                </Text>
-              </View>
-            </View>
-            {item.completed ? (
-              <TouchableOpacity onPress={() => toggleTask(item.id, 'complete')}>
-                <MaterialIcons name="check-circle" size={32} color="#43A047" />
-              </TouchableOpacity>
-            ) : item.failed ? (
-              <TouchableOpacity onPress={() => toggleTask(item.id, 'fail')}>
-                <MaterialIcons name="cancel" size={32} color="#E53935" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={() => toggleTask(item.id, 'complete')}>
-                <MaterialIcons name="access-time" size={32} color="#757575" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <TaskItem item={item} onToggle={toggleTask} />
         )}
       />
+      
       {/* Floating Add Button */}
       <TouchableOpacity style={styles.fab}>
         <MaterialIcons name="add" size={36} color="#fff" />
@@ -208,38 +159,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 32,
     fontWeight: 'bold',
-  },
-  dateBarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 8,
-  },
-  dateItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 0,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  selectedDateItem: {
-    backgroundColor: '#F06292',
-  },
-  dateDay: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  selectedDateDay: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  dateNum: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  selectedDateNum: {
-    color: '#fff',
   },
   filterRow: {
     flexDirection: 'row',
@@ -269,39 +188,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
-  },
-  taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#232325',
-    borderRadius: 16,
-    marginHorizontal: 8,
-    marginVertical: 6,
-    padding: 16,
-  },
-  taskIconBox: {
-    backgroundColor: '#232325',
-    borderRadius: 12,
-    marginRight: 16,
-    padding: 6,
-  },
-  taskTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  taskType: {
-    color: '#F06292',
-    fontSize: 14,
-    marginRight: 8,
-  },
-  habitType: {
-    color: '#E57373',
-  },
-  taskTime: {
-    color: '#fff',
-    fontSize: 14,
-    marginLeft: 8,
   },
   fab: {
     position: 'absolute',
